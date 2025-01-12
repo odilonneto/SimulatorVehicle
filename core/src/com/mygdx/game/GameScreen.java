@@ -11,6 +11,7 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ScreenUtils;
+
 import java.util.Iterator;
 
 public class GameScreen implements Screen {
@@ -21,8 +22,9 @@ public class GameScreen implements Screen {
     private Texture carTexture;
     private Texture roadTexture;
     private Texture obstacleTexture;
-    private Rectangle car;
-    private Array<Rectangle> obstacles;
+    private Rectangle car; // Retângulo usado para desenhar o carro
+    private Rectangle collisionBox; // Retângulo usado para colisões
+    private Array<Obstacle> obstacles; // Array de obstáculos
     private float roadY1, roadY2;
     private BitmapFont font;
     private boolean isGameOver = false;
@@ -33,6 +35,13 @@ public class GameScreen implements Screen {
     private Sound collisionSound;
     private float carSpeed = 200f;
     private float obstacleSpeed = 200f;
+
+    // Classe interna para representar o obstáculo
+    private class Obstacle {
+        Rectangle visualBox;      // Retângulo visual do obstáculo
+        Rectangle collisionBox;   // Retângulo de colisão do obstáculo
+        float speed;              // Velocidade do obstáculo
+    }
 
     public GameScreen(Main game) {
         this.game = game;
@@ -46,12 +55,18 @@ public class GameScreen implements Screen {
         obstacleTexture = new Texture("car.png");
 
         car = new Rectangle();
-        car.width = 140 * 0.8f; // Reduzindo a largura da zona de colisão do carro
-        car.height = 150 * 0.8f; // Reduzindo a altura da zona de colisão do carro
+        car.width = 140 * 0.8f; // Tamanho visual do carro
+        car.height = 150 * 0.8f;
         car.x = (Gdx.graphics.getWidth() - car.width) / 2;
         car.y = 50;
 
-        obstacles = new Array<>();
+        collisionBox = new Rectangle();
+        collisionBox.width = 50;  // Ajuste para corresponder à área de colisão desejada
+        collisionBox.height = 100;
+        collisionBox.x = car.x + (car.width - collisionBox.width) / 2; // Centraliza no carro
+        collisionBox.y = car.y;
+
+        obstacles = new Array<>(); // Inicializa a lista de obstáculos
 
         roadY1 = 0;
         roadY2 = Gdx.graphics.getHeight();
@@ -65,8 +80,9 @@ public class GameScreen implements Screen {
         backgroundMusic.setVolume(0.5f);
         backgroundMusic.play();
 
-        pistaEsquerda = 125;
-        pistaDireita = Gdx.graphics.getWidth() - 125;
+        pistaEsquerda = 100;
+        pistaDireita = Gdx.graphics.getWidth() - 100;
+
     }
 
     @Override
@@ -96,20 +112,28 @@ public class GameScreen implements Screen {
             }
 
             // Controle do carro
-            if (Gdx.input.isKeyJustPressed(Input.Keys.RIGHT)) {
-                car.x = pistaDireita - car.width;
+            if (Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
+                car.x += carSpeed * delta;
             }
-            if (Gdx.input.isKeyJustPressed(Input.Keys.LEFT)) {
-                car.x = pistaEsquerda;
+            if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
+                car.x -= carSpeed * delta;
             }
+
+            // Atualiza a posição da área de colisão
+            collisionBox.x = car.x + (car.width - collisionBox.width) / 2;
+            collisionBox.y = car.y;
 
             // Limita a movimentação do carro
             if (car.x < pistaEsquerda) {
                 car.x = pistaEsquerda;
+                isGameOver = true;
+                collisionSound.play();
                 triggerGameOver();
             }
             if (car.x + car.width > pistaDireita) {
                 car.x = pistaDireita - car.width;
+                isGameOver = true;
+                collisionSound.play();
                 triggerGameOver();
             }
 
@@ -120,14 +144,16 @@ public class GameScreen implements Screen {
             }
 
             // Atualiza e verifica colisões com obstáculos
-            Iterator<Rectangle> iter = obstacles.iterator();
+            Iterator<Obstacle> iter = obstacles.iterator();
             while (iter.hasNext()) {
-                Rectangle obstacle = iter.next();
-                obstacle.y -= obstacleSpeed * delta;
-                if (obstacle.y + obstacle.height < 0) {
+                Obstacle obstacle = iter.next();
+                obstacle.visualBox.y -= obstacle.speed * delta;
+                obstacle.collisionBox.y -= obstacle.speed * delta;
+
+                if (obstacle.visualBox.y + obstacle.visualBox.height < 0) {
                     iter.remove();
                 }
-                if (obstacle.overlaps(car)) {
+                if (collisionBox.overlaps(obstacle.collisionBox)) { // Verifica com a área de colisão
                     triggerGameOver();
                 }
             }
@@ -142,8 +168,8 @@ public class GameScreen implements Screen {
         batch.draw(roadTexture, 0, roadY1, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         batch.draw(roadTexture, 0, roadY2, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         batch.draw(carTexture, car.x, car.y, car.width, car.height);
-        for (Rectangle obstacle : obstacles) {
-            batch.draw(obstacleTexture, obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+        for (Obstacle obstacle : obstacles) {
+            batch.draw(obstacleTexture, obstacle.visualBox.x, obstacle.visualBox.y, obstacle.visualBox.width, obstacle.visualBox.height);
         }
         if (isGameOver) {
             font.draw(batch, "Jogo encerrado.", Gdx.graphics.getWidth() / 2f - 100, Gdx.graphics.getHeight() / 2f);
@@ -157,21 +183,35 @@ public class GameScreen implements Screen {
     }
 
     private void spawnObstacle() {
-        Rectangle obstacle = new Rectangle();
-        obstacle.width = car.width; // Reduzindo a largura da zona de colisão do obstáculo
-        obstacle.height = car.height; // Reduzindo a altura da zona de colisão do obstáculo
+        // Cria um novo obstáculo
+        Obstacle obstacle = new Obstacle();
 
-        // Escolhe aleatoriamente entre a pista esquerda ou direita
+        // Configura o retângulo visual
+        obstacle.visualBox = new Rectangle();
+        obstacle.visualBox.width = car.width;  // Tamanho visual do obstáculo
+        obstacle.visualBox.height = car.height;
+        obstacle.visualBox.y = Gdx.graphics.getHeight();
+
+        // Configura o retângulo de colisão
+        obstacle.collisionBox = new Rectangle();
+        obstacle.collisionBox.width = 50;  // Tamanho da área de colisão
+        obstacle.collisionBox.height = 100;
+
+        // Posiciona o obstáculo (visual e colisão)
         if (Math.random() < 0.5) {
-            obstacle.x = pistaEsquerda + (car.width - obstacle.width) / 2; // Centralizando o obstáculo na pista esquerda
+            obstacle.visualBox.x = pistaEsquerda + (pistaDireita - pistaEsquerda) / 4 - obstacle.visualBox.width / 2;
         } else {
-            obstacle.x = pistaDireita - car.width + (car.width - obstacle.width) / 2; // Centralizando o obstáculo na pista direita
+            obstacle.visualBox.x = pistaDireita - (pistaDireita - pistaEsquerda) / 4 - obstacle.visualBox.width / 2;
         }
+        obstacle.collisionBox.x = obstacle.visualBox.x + (obstacle.visualBox.width - obstacle.collisionBox.width) / 2;
+        obstacle.collisionBox.y = obstacle.visualBox.y + (obstacle.visualBox.height - obstacle.collisionBox.height) / 2;
 
-        obstacle.y = Gdx.graphics.getHeight();
+        // Define a velocidade do obstáculo (diferente da do carro principal)
+        obstacle.speed = 100 + (float)(Math.random() * 150); // Velocidade do obstáculo aleatória
+
+        // Adiciona à lista de obstáculos
         obstacles.add(obstacle);
     }
-
 
     private void triggerGameOver() {
         isGameOver = true;
