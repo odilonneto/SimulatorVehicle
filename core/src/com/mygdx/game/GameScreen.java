@@ -8,6 +8,7 @@ import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.ParticleEffect;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
@@ -27,6 +28,7 @@ public class GameScreen implements Screen {
     private TextureRegion currentFrame;
     private Texture roadTexture;
     private Texture obstacleTexture;
+    private Texture brakeLightsTexture; // Textura dos faróis ligados
     private Rectangle car;
     private Rectangle collisionBox;
     private Array<Obstacle> obstacles;
@@ -49,6 +51,10 @@ public class GameScreen implements Screen {
     private Rectangle buttonRestartBounds;
     private boolean isRestartHovered = false;
 
+    // Efeito de partículas
+    private ParticleEffect fireEffect;
+    private boolean isParticleActive = false;
+
     private class Obstacle {
         Rectangle visualBox;
         Rectangle collisionBox;
@@ -65,6 +71,7 @@ public class GameScreen implements Screen {
         carSpriteSheet = new Texture("SportsCar.png");
         roadTexture = new Texture("road.jpg");
         obstacleTexture = new Texture("car.png");
+        brakeLightsTexture = new Texture("BrakeLightsOn.png"); // Carregar a textura dos faróis
 
         // Botões
         buttonRestartTexture = new Texture("button_restart.png");
@@ -115,6 +122,11 @@ public class GameScreen implements Screen {
 
         pistaEsquerda = 130;
         pistaDireita = Gdx.graphics.getWidth() - 130;
+
+        // Inicializar efeito de partículas
+        fireEffect = new ParticleEffect();
+        fireEffect.load(Gdx.files.internal("fire.p"), Gdx.files.internal(""));
+        fireEffect.scaleEffect(0.5f);
     }
 
     @Override
@@ -143,10 +155,10 @@ public class GameScreen implements Screen {
             }
 
             if (Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
-                car.x += carSpeed * delta;
+                car.x += 70f * delta;
                 currentFrame = rightFrames[(int) (animationTime * 10) % rightFrames.length];
             } else if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
-                car.x -= carSpeed * delta;
+                car.x -= 70f * delta;
                 currentFrame = leftFrames[(int) (animationTime * 10) % leftFrames.length];
             } else {
                 currentFrame = straightFrames[0];
@@ -196,8 +208,18 @@ public class GameScreen implements Screen {
         batch.draw(roadTexture, 0, roadY1, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         batch.draw(roadTexture, 0, roadY2, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         batch.draw(currentFrame, car.x, car.y, car.width, car.height);
+
+        // Desenhar faróis quando o carro estiver se movendo
+        if (Gdx.input.isKeyPressed(Input.Keys.LEFT) || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
+            batch.draw(brakeLightsTexture, car.x, car.y, car.width, car.height);
+        }
+
         for (Obstacle obstacle : obstacles) {
             batch.draw(obstacleTexture, obstacle.visualBox.x, obstacle.visualBox.y, obstacle.visualBox.width, obstacle.visualBox.height);
+        }
+        if (isParticleActive) {
+            fireEffect.update(delta);
+            fireEffect.draw(batch);
         }
         if (isGameOver) {
             font.draw(batch, "Jogo encerrado.", Gdx.graphics.getWidth() / 2f - 60, Gdx.graphics.getHeight() / 2f - 80);
@@ -243,6 +265,9 @@ public class GameScreen implements Screen {
         isGameOver = true;
         collisionSound.play();
         backgroundMusic.stop();
+        isParticleActive = true;
+        fireEffect.setPosition(car.x + car.width / 2, car.y + car.height / 2);
+        fireEffect.start();
     }
 
     @Override
@@ -263,11 +288,13 @@ public class GameScreen implements Screen {
         carSpriteSheet.dispose();
         roadTexture.dispose();
         obstacleTexture.dispose();
+        brakeLightsTexture.dispose(); // Dispose da textura dos faróis
         font.dispose();
         backgroundMusic.dispose();
         collisionSound.dispose();
         buttonRestartTexture.dispose();
         buttonRestartHoverTexture.dispose();
         buttonRestartClickedTexture.dispose();
+        fireEffect.dispose();
     }
 }
