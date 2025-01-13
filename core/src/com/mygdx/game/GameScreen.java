@@ -8,6 +8,7 @@ import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ScreenUtils;
@@ -19,12 +20,16 @@ public class GameScreen implements Screen {
     private float pistaDireita;
     private final Main game;
     private SpriteBatch batch;
-    private Texture carTexture;
+    private Texture carSpriteSheet;
+    private TextureRegion[] straightFrames;
+    private TextureRegion[] leftFrames;
+    private TextureRegion[] rightFrames;
+    private TextureRegion currentFrame;
     private Texture roadTexture;
     private Texture obstacleTexture;
-    private Rectangle car; // Retângulo usado para desenhar o carro
-    private Rectangle collisionBox; // Retângulo usado para colisões
-    private Array<Obstacle> obstacles; // Array de obstáculos
+    private Rectangle car;
+    private Rectangle collisionBox;
+    private Array<Obstacle> obstacles;
     private float roadY1, roadY2;
     private BitmapFont font;
     private boolean isGameOver = false;
@@ -35,12 +40,19 @@ public class GameScreen implements Screen {
     private Sound collisionSound;
     private float carSpeed = 200f;
     private float obstacleSpeed = 200f;
+    private float animationTime = 0f;
 
-    // Classe interna para representar o obstáculo
+    // Botão reiniciar
+    private Texture buttonRestartTexture;
+    private Texture buttonRestartHoverTexture;
+    private Texture buttonRestartClickedTexture;
+    private Rectangle buttonRestartBounds;
+    private boolean isRestartHovered = false;
+
     private class Obstacle {
-        Rectangle visualBox;      // Retângulo visual do obstáculo
-        Rectangle collisionBox;   // Retângulo de colisão do obstáculo
-        float speed;              // Velocidade do obstáculo
+        Rectangle visualBox;
+        Rectangle collisionBox;
+        float speed;
     }
 
     public GameScreen(Main game) {
@@ -50,23 +62,44 @@ public class GameScreen implements Screen {
     @Override
     public void show() {
         batch = new SpriteBatch();
-        carTexture = new Texture("car.png");
+        carSpriteSheet = new Texture("SportsCar.png");
         roadTexture = new Texture("road.jpg");
         obstacleTexture = new Texture("car.png");
 
+        // Botões
+        buttonRestartTexture = new Texture("button_restart.png");
+        buttonRestartHoverTexture = new Texture("button_restart_hover.png");
+        buttonRestartClickedTexture = new Texture("button_restart_clicked.png");
+
+        buttonRestartBounds = new Rectangle(
+                Gdx.graphics.getWidth() / 2f - 100,
+                Gdx.graphics.getHeight() / 2f - 75,
+                200,
+                50
+        );
+
+        TextureRegion[][] tmpFrames = TextureRegion.split(carSpriteSheet,
+                carSpriteSheet.getWidth() / 7, carSpriteSheet.getHeight());
+
+        straightFrames = new TextureRegion[]{tmpFrames[0][0]};
+        leftFrames = new TextureRegion[]{tmpFrames[0][1], tmpFrames[0][2], tmpFrames[0][3]};
+        rightFrames = new TextureRegion[]{tmpFrames[0][4], tmpFrames[0][5], tmpFrames[0][6]};
+
+        currentFrame = straightFrames[0];
+
         car = new Rectangle();
-        car.width = 140 * 0.8f; // Tamanho visual do carro
+        car.width = 75 * 0.8f;
         car.height = 150 * 0.8f;
         car.x = (Gdx.graphics.getWidth() - car.width) / 2;
         car.y = 50;
 
         collisionBox = new Rectangle();
-        collisionBox.width = 50;  // Ajuste para corresponder à área de colisão desejada
+        collisionBox.width = 50;
         collisionBox.height = 100;
-        collisionBox.x = car.x + (car.width - collisionBox.width) / 2; // Centraliza no carro
+        collisionBox.x = car.x + (car.width - collisionBox.width) / 2;
         collisionBox.y = car.y;
 
-        obstacles = new Array<>(); // Inicializa a lista de obstáculos
+        obstacles = new Array<>();
 
         roadY1 = 0;
         roadY2 = Gdx.graphics.getHeight();
@@ -80,9 +113,8 @@ public class GameScreen implements Screen {
         backgroundMusic.setVolume(0.5f);
         backgroundMusic.play();
 
-        pistaEsquerda = 100;
-        pistaDireita = Gdx.graphics.getWidth() - 100;
-
+        pistaEsquerda = 130;
+        pistaDireita = Gdx.graphics.getWidth() - 130;
     }
 
     @Override
@@ -92,16 +124,15 @@ public class GameScreen implements Screen {
         if (!isGameOver) {
             timeSinceLastUpdate += delta;
             obstacleSpawnTime += delta;
+            animationTime += delta;
 
-            // Aumenta a pontuação a cada segundo
             if (timeSinceLastUpdate >= 1f) {
                 score += 10;
                 timeSinceLastUpdate = 0f;
-                carSpeed += 5;  // Aumenta a velocidade com o tempo
+                carSpeed += 5;
                 obstacleSpeed += 5;
             }
 
-            // Movimento da estrada
             roadY1 -= obstacleSpeed * delta;
             roadY2 -= obstacleSpeed * delta;
             if (roadY1 + Gdx.graphics.getHeight() < 0) {
@@ -111,39 +142,33 @@ public class GameScreen implements Screen {
                 roadY2 = roadY1 + Gdx.graphics.getHeight();
             }
 
-            // Controle do carro
             if (Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
                 car.x += carSpeed * delta;
-            }
-            if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
+                currentFrame = rightFrames[(int) (animationTime * 10) % rightFrames.length];
+            } else if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
                 car.x -= carSpeed * delta;
+                currentFrame = leftFrames[(int) (animationTime * 10) % leftFrames.length];
+            } else {
+                currentFrame = straightFrames[0];
             }
 
-            // Atualiza a posição da área de colisão
             collisionBox.x = car.x + (car.width - collisionBox.width) / 2;
             collisionBox.y = car.y;
 
-            // Limita a movimentação do carro
             if (car.x < pistaEsquerda) {
                 car.x = pistaEsquerda;
-                isGameOver = true;
-                collisionSound.play();
                 triggerGameOver();
             }
             if (car.x + car.width > pistaDireita) {
                 car.x = pistaDireita - car.width;
-                isGameOver = true;
-                collisionSound.play();
                 triggerGameOver();
             }
 
-            // Spawning de obstáculos
             if (obstacleSpawnTime >= 2f) {
                 spawnObstacle();
                 obstacleSpawnTime = 0f;
             }
 
-            // Atualiza e verifica colisões com obstáculos
             Iterator<Obstacle> iter = obstacles.iterator();
             while (iter.hasNext()) {
                 Obstacle obstacle = iter.next();
@@ -153,28 +178,40 @@ public class GameScreen implements Screen {
                 if (obstacle.visualBox.y + obstacle.visualBox.height < 0) {
                     iter.remove();
                 }
-                if (collisionBox.overlaps(obstacle.collisionBox)) { // Verifica com a área de colisão
+                if (collisionBox.overlaps(obstacle.collisionBox)) {
                     triggerGameOver();
                 }
             }
         } else {
-            if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
+            float mouseX = Gdx.input.getX();
+            float mouseY = Gdx.graphics.getHeight() - Gdx.input.getY();
+            isRestartHovered = buttonRestartBounds.contains(mouseX, mouseY);
+
+            if (isRestartHovered && Gdx.input.isTouched()) {
                 game.setScreen(new GameScreen(game));
             }
         }
 
-        // Renderização
         batch.begin();
         batch.draw(roadTexture, 0, roadY1, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         batch.draw(roadTexture, 0, roadY2, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-        batch.draw(carTexture, car.x, car.y, car.width, car.height);
+        batch.draw(currentFrame, car.x, car.y, car.width, car.height);
         for (Obstacle obstacle : obstacles) {
             batch.draw(obstacleTexture, obstacle.visualBox.x, obstacle.visualBox.y, obstacle.visualBox.width, obstacle.visualBox.height);
         }
         if (isGameOver) {
-            font.draw(batch, "Jogo encerrado.", Gdx.graphics.getWidth() / 2f - 100, Gdx.graphics.getHeight() / 2f);
-            font.draw(batch, "Pressione 'R' para reiniciar.", Gdx.graphics.getWidth() / 2f - 110, Gdx.graphics.getHeight() / 2f - 50);
-            font.draw(batch, "Pontuação final: " + score, Gdx.graphics.getWidth() / 2f - 80, Gdx.graphics.getHeight() / 2f - 100);
+            font.draw(batch, "Jogo encerrado.", Gdx.graphics.getWidth() / 2f - 60, Gdx.graphics.getHeight() / 2f - 80);
+            font.draw(batch, "Pontuação final: " + score, Gdx.graphics.getWidth() / 2f - 60, Gdx.graphics.getHeight() / 2f - 100);
+
+            if (isRestartHovered) {
+                if (Gdx.input.isTouched()) {
+                    batch.draw(buttonRestartClickedTexture, buttonRestartBounds.x, buttonRestartBounds.y, buttonRestartBounds.width, buttonRestartBounds.height);
+                } else {
+                    batch.draw(buttonRestartHoverTexture, buttonRestartBounds.x, buttonRestartBounds.y, buttonRestartBounds.width, buttonRestartBounds.height);
+                }
+            } else {
+                batch.draw(buttonRestartTexture, buttonRestartBounds.x, buttonRestartBounds.y, buttonRestartBounds.width, buttonRestartBounds.height);
+            }
         } else {
             font.draw(batch, "Car Racing!", 10, Gdx.graphics.getHeight() - 10);
             font.draw(batch, "Score: " + score, 10, Gdx.graphics.getHeight() - 30);
@@ -183,21 +220,14 @@ public class GameScreen implements Screen {
     }
 
     private void spawnObstacle() {
-        // Cria um novo obstáculo
         Obstacle obstacle = new Obstacle();
-
-        // Configura o retângulo visual
         obstacle.visualBox = new Rectangle();
-        obstacle.visualBox.width = car.width;  // Tamanho visual do obstáculo
-        obstacle.visualBox.height = car.height;
+        obstacle.visualBox.width = 140 * 0.8f;
+        obstacle.visualBox.height = 150 * 0.8f;
         obstacle.visualBox.y = Gdx.graphics.getHeight();
-
-        // Configura o retângulo de colisão
         obstacle.collisionBox = new Rectangle();
-        obstacle.collisionBox.width = 50;  // Tamanho da área de colisão
+        obstacle.collisionBox.width = 50;
         obstacle.collisionBox.height = 100;
-
-        // Posiciona o obstáculo (visual e colisão)
         if (Math.random() < 0.5) {
             obstacle.visualBox.x = pistaEsquerda + (pistaDireita - pistaEsquerda) / 4 - obstacle.visualBox.width / 2;
         } else {
@@ -205,17 +235,14 @@ public class GameScreen implements Screen {
         }
         obstacle.collisionBox.x = obstacle.visualBox.x + (obstacle.visualBox.width - obstacle.collisionBox.width) / 2;
         obstacle.collisionBox.y = obstacle.visualBox.y + (obstacle.visualBox.height - obstacle.collisionBox.height) / 2;
-
-        // Define a velocidade do obstáculo (diferente da do carro principal)
-        obstacle.speed = 100 + (float)(Math.random() * 150); // Velocidade do obstáculo aleatória
-
-        // Adiciona à lista de obstáculos
+        obstacle.speed = 100 + (float) (Math.random() * 150);
         obstacles.add(obstacle);
     }
 
     private void triggerGameOver() {
         isGameOver = true;
         collisionSound.play();
+        backgroundMusic.stop();
     }
 
     @Override
@@ -233,11 +260,14 @@ public class GameScreen implements Screen {
     @Override
     public void dispose() {
         batch.dispose();
-        carTexture.dispose();
+        carSpriteSheet.dispose();
         roadTexture.dispose();
         obstacleTexture.dispose();
         font.dispose();
         backgroundMusic.dispose();
         collisionSound.dispose();
+        buttonRestartTexture.dispose();
+        buttonRestartHoverTexture.dispose();
+        buttonRestartClickedTexture.dispose();
     }
 }
