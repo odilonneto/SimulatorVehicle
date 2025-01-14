@@ -5,12 +5,11 @@ import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.audio.Sound;
+import com.badlogic.gdx.utils.Pool;
 import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.graphics.g2d.BitmapFont;
-import com.badlogic.gdx.graphics.g2d.ParticleEffect;
-import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.graphics.g2d.*;
 import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.assets.AssetManager;
@@ -29,6 +28,8 @@ public class GameScreen implements Screen {
     private TextureRegion currentFrame;
     private Rectangle car;
     private Rectangle collisionBox;
+    private ObstaclePool obstaclePool;
+    private FuelPool fuelPool;
     private Array<Obstacle> obstacles;
     private Array<Fuel> fuels;
     private float roadY1, roadY2;
@@ -51,6 +52,20 @@ public class GameScreen implements Screen {
     private boolean areHeadLightsBlinking = false;
     private float blinkTime = 0f;
 
+    //////////////
+    private boolean showMessage = false;
+    private float messageTimer = 0f;
+    private TextButton messageButton;
+    private NinePatch patch;
+
+
+    private float messageWidth = 0f;
+    private float messageHeight = 0f;
+    private final float maxMessageWidth = 150f; // Tamanho final do balão de fala
+    private final float maxMessageHeight = 150f;
+    private final float messageGrowSpeed = 300f;
+    /////////////
+
     private class Obstacle {
         Rectangle visualBox;
         Rectangle collisionBox;
@@ -65,12 +80,27 @@ public class GameScreen implements Screen {
         this.game = game;
     }
 
+    public class ObstaclePool extends Pool<Obstacle> {
+        @Override
+        protected Obstacle newObject() {
+            return new Obstacle();
+        }
+    }
+
+    public class FuelPool extends Pool<Fuel> {
+        @Override
+        protected Fuel newObject() {
+            return new Fuel();
+        }
+    }
+
     @Override
     public void show() {
         batch = new SpriteBatch();
         assetManager = new AssetManager();
+        obstaclePool = new ObstaclePool();
+        fuelPool = new FuelPool();
 
-        // Carregar recursos com AssetManager
         assetManager.load("SportsCar.png", Texture.class);
         assetManager.load("road.jpg", Texture.class);
         assetManager.load("car.png", Texture.class);
@@ -86,9 +116,9 @@ public class GameScreen implements Screen {
         assetManager.finishLoading();
 
         Texture carSpriteSheet = assetManager.get("SportsCar.png", Texture.class);
+        patch = new NinePatch(new Texture(Gdx.files.internal("knob.png")), 12, 12, 12, 12);
 
-        TextureRegion[][] tmpFrames = TextureRegion.split(carSpriteSheet,
-                carSpriteSheet.getWidth() / 7, carSpriteSheet.getHeight());
+        TextureRegion[][] tmpFrames = TextureRegion.split(carSpriteSheet, carSpriteSheet.getWidth() / 7, carSpriteSheet.getHeight());
 
         straightFrames = new TextureRegion[]{tmpFrames[0][0]};
         leftFrames = new TextureRegion[]{tmpFrames[0][1], tmpFrames[0][2], tmpFrames[0][3]};
@@ -134,6 +164,7 @@ public class GameScreen implements Screen {
                 200,
                 50
         );
+
     }
 
     @Override
@@ -142,9 +173,18 @@ public class GameScreen implements Screen {
 
         if (!isGameOver) {
             timeSinceLastUpdate += delta;
+            messageTimer += delta;
             obstacleSpawnTime += delta;
             fuelSpawnTime += delta;
             animationTime += delta;
+
+            if (messageTimer >= 5f && !showMessage) {
+                showMessage = true; // Exibe o balão após 10 segundos
+            }
+
+            if (showMessage && messageTimer >= 10f) { // Oculta após 5 segundos
+                showMessage = false;
+            }
 
             if (timeSinceLastUpdate >= 1f) {
                 score += 10;
@@ -202,6 +242,7 @@ public class GameScreen implements Screen {
 
                 if (obstacle.visualBox.y + obstacle.visualBox.height < 0) {
                     obstacleIter.remove();
+                    obstaclePool.free(obstacle);
                 }
                 if (collisionBox.overlaps(obstacle.collisionBox)) {
                     triggerGameOver();
@@ -215,19 +256,22 @@ public class GameScreen implements Screen {
 
                 if (fuel.visualBox.y + fuel.visualBox.height < 0) {
                     fuelIter.remove();
+                    fuelPool.free(fuel);
                 }
                 if (collisionBox.overlaps(fuel.visualBox)) {
                     fuelCollected++;
                     assetManager.get("fuel_sound.mp3", Sound.class).play();
                     fuelIter.remove();
+                    fuelPool.free(fuel);
                 }
-
                 for (Obstacle obstacle : obstacles) {
                     if (obstacle.collisionBox.overlaps(fuel.visualBox)) {
                         fuelIter.remove();
+                        fuelPool.free(fuel);
                     }
                 }
             }
+
         } else {
             float mouseX = Gdx.input.getX();
             float mouseY = Gdx.graphics.getHeight() - Gdx.input.getY();
@@ -249,6 +293,26 @@ public class GameScreen implements Screen {
         batch.draw(assetManager.get("road.jpg", Texture.class), 0, roadY2, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         batch.draw(currentFrame, car.x, car.y, car.width, car.height);
 
+        if (showMessage) {
+            if (messageWidth < maxMessageWidth) {
+                messageWidth += messageGrowSpeed * delta;
+            }
+            if (messageHeight < maxMessageHeight) {
+                messageHeight += messageGrowSpeed * delta;
+            }
+
+            messageWidth = Math.min(messageWidth, maxMessageWidth);
+            messageHeight = Math.min(messageHeight, maxMessageHeight);
+
+            float messageX = 0;
+            float messageY = 0; // Margem do topo
+            patch.draw(batch, 0, 0, messageWidth, messageHeight);
+            font.draw(batch, "Hello!", messageX + 95, messageY + messageHeight - 30);
+        } else {
+            messageWidth = 0;
+            messageHeight = 0;
+        }
+
         if (Gdx.input.isKeyPressed(Input.Keys.LEFT) || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
             batch.draw(assetManager.get("BrakeLightsOn.png", Texture.class), car.x, car.y, car.width, car.height);
         }
@@ -267,8 +331,9 @@ public class GameScreen implements Screen {
         }
 
         if (isGameOver) {
-            font.draw(batch, "Jogo encerrado.", Gdx.graphics.getWidth() / 2f - 60, Gdx.graphics.getHeight() / 2f - 80);
-            font.draw(batch, "Pontuação final: " + score, Gdx.graphics.getWidth() / 2f - 60, Gdx.graphics.getHeight() / 2f - 100);
+            font.draw(batch, "Game Over.", Gdx.graphics.getWidth() / 2f - 60, Gdx.graphics.getHeight() / 2f - 80);
+            font.draw(batch, "Final score: " + score, Gdx.graphics.getWidth() / 2f - 60, Gdx.graphics.getHeight() / 2f - 100);
+            font.draw(batch, "Fuel collected: " + fuelCollected, Gdx.graphics.getWidth() / 2f - 60, Gdx.graphics.getHeight() / 2f - 120);
 
             if (areHeadLightsBlinking) {
                 batch.draw(assetManager.get("HeadLightsOn.png", Texture.class), car.x, car.y, car.width, car.height);
@@ -288,7 +353,8 @@ public class GameScreen implements Screen {
     }
 
     private void spawnObstacle() {
-        Obstacle obstacle = new Obstacle();
+        Obstacle obstacle = obstaclePool.obtain();
+
         obstacle.visualBox = new Rectangle();
         obstacle.visualBox.width = 140 * 0.8f;
         obstacle.visualBox.height = 150 * 0.8f;
@@ -296,19 +362,23 @@ public class GameScreen implements Screen {
         obstacle.collisionBox = new Rectangle();
         obstacle.collisionBox.width = 50;
         obstacle.collisionBox.height = 100;
+
         if (Math.random() < 0.5) {
             obstacle.visualBox.x = pistaEsquerda + (pistaDireita - pistaEsquerda) / 4 - obstacle.visualBox.width / 2;
         } else {
             obstacle.visualBox.x = pistaDireita - (pistaDireita - pistaEsquerda) / 4 - obstacle.visualBox.width / 2;
         }
+
         obstacle.collisionBox.x = obstacle.visualBox.x + (obstacle.visualBox.width - obstacle.collisionBox.width) / 2;
         obstacle.collisionBox.y = obstacle.visualBox.y + (obstacle.visualBox.height - obstacle.collisionBox.height) / 2;
         obstacle.speed = 100 + (float) (Math.random() * 150);
+
         obstacles.add(obstacle);
     }
 
     private void spawnFuel() {
-        Fuel fuel = new Fuel();
+        Fuel fuel = fuelPool.obtain();
+
         fuel.visualBox = new Rectangle();
         fuel.visualBox.width = 80;
         fuel.visualBox.height = 80;
@@ -351,5 +421,7 @@ public class GameScreen implements Screen {
         font.dispose();
         fireEffect.dispose();
         assetManager.dispose();
+        obstaclePool.clear();
+        fuelPool.clear();
     }
 }
