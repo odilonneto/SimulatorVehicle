@@ -40,7 +40,6 @@ public class GameScreen implements Screen {
     private float obstacleSpawnTime = 0f;
     private Music backgroundMusic;
     private Sound collisionSound;
-    private float carSpeed = 200f;
     private float obstacleSpeed = 200f;
     private float animationTime = 0f;
 
@@ -55,7 +54,7 @@ public class GameScreen implements Screen {
     private ParticleEffect fireEffect;
     private boolean isParticleActive = false;
 
-    private class Obstacle {
+    private static class Obstacle {
         Rectangle visualBox;
         Rectangle collisionBox;
         float speed;
@@ -141,7 +140,6 @@ public class GameScreen implements Screen {
             if (timeSinceLastUpdate >= 1f) {
                 score += 10;
                 timeSinceLastUpdate = 0f;
-                carSpeed += 5;
                 obstacleSpeed += 5;
             }
 
