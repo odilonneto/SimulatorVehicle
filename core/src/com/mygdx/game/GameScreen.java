@@ -1,6 +1,7 @@
 package com.mygdx.game;
 
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.InputProcessor;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.audio.Music;
@@ -52,19 +53,16 @@ public class GameScreen implements Screen {
     private boolean areHeadLightsBlinking = false;
     private float blinkTime = 0f;
 
-    //////////////
     private boolean showMessage = false;
     private float messageTimer = 0f;
     private TextButton messageButton;
     private NinePatch patch;
-
 
     private float messageWidth = 0f;
     private float messageHeight = 0f;
     private final float maxMessageWidth = 150f; // Tamanho final do balão de fala
     private final float maxMessageHeight = 150f;
     private final float messageGrowSpeed = 300f;
-    /////////////
 
     private class Obstacle {
         Rectangle visualBox;
@@ -91,6 +89,84 @@ public class GameScreen implements Screen {
         @Override
         protected Fuel newObject() {
             return new Fuel();
+        }
+    }
+
+    private class GameInputProcessor implements InputProcessor {
+        private boolean isRightPressed = false;
+        private boolean isLeftPressed = false;
+        private boolean isRestartHovered = false;
+        private boolean isRestartClicked = false;
+
+        @Override
+        public boolean keyDown(int keycode) {
+            if (keycode == Input.Keys.RIGHT) {
+                isRightPressed = true; // Marca a tecla como pressionada
+            } else if (keycode == Input.Keys.LEFT) {
+                isLeftPressed = true; // Marca a tecla como pressionada
+            }
+            return true;
+        }
+
+        @Override
+        public boolean keyUp(int keycode) {
+            if (keycode == Input.Keys.RIGHT) {
+                isRightPressed = false; // Marca a tecla como não pressionada
+            } else if (keycode == Input.Keys.LEFT) {
+                isLeftPressed = false; // Marca a tecla como não pressionada
+            }
+            return true;
+        }
+
+        @Override
+        public boolean keyTyped(char character) {
+            // Lógica para teclas digitadas
+            return false;
+        }
+
+        @Override
+        public boolean touchDown(int screenX, int screenY, int pointer, int button) {
+            if (buttonRestartBounds.contains(screenX, Gdx.graphics.getHeight() - screenY)) {
+                isRestartClicked = true;
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        public boolean touchUp(int screenX, int screenY, int pointer, int button) {
+            if (buttonRestartBounds.contains(screenX, Gdx.graphics.getHeight() - screenY)) {
+                if (isRestartClicked) {
+                    isGameOver = false;
+                    game.setScreen(new GameScreen(game));
+                }
+            }
+            isRestartClicked = false;
+            return true;
+        }
+
+        @Override
+        public boolean touchDragged(int screenX, int screenY, int pointer) {
+            // Lógica para quando o toque é arrastado
+            return true;
+        }
+
+        @Override
+        public boolean mouseMoved(int screenX, int screenY) {
+            isRestartHovered = buttonRestartBounds.contains(screenX, Gdx.graphics.getHeight() - screenY);
+            return true;
+        }
+
+        @Override
+        public boolean scrolled(float amountX, float amountY) {
+            // Lógica para rolagem
+            return false;
+        }
+
+        @Override
+        public boolean touchCancelled(int screenX, int screenY, int pointer, int button) {
+            // Lógica para quando um toque é cancelado
+            return false;
         }
     }
 
@@ -165,11 +241,14 @@ public class GameScreen implements Screen {
                 50
         );
 
+        Gdx.input.setInputProcessor(new GameInputProcessor());
+
     }
 
     @Override
     public void render(float delta) {
         ScreenUtils.clear(0, 0.5f, 0, 1);
+        GameInputProcessor inputProcessor = (GameInputProcessor) Gdx.input.getInputProcessor();
 
         if (!isGameOver) {
             timeSinceLastUpdate += delta;
@@ -202,11 +281,11 @@ public class GameScreen implements Screen {
                 roadY2 = roadY1 + Gdx.graphics.getHeight();
             }
 
-            if (Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
-                car.x += 100f * delta;
+            if (((GameInputProcessor) Gdx.input.getInputProcessor()).isRightPressed) {
+                car.x += carSpeed * delta;
                 currentFrame = rightFrames[(int) (animationTime * 10) % rightFrames.length];
-            } else if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
-                car.x -= 100f * delta;
+            } else if (((GameInputProcessor) Gdx.input.getInputProcessor()).isLeftPressed) {
+                car.x -= carSpeed * delta;
                 currentFrame = leftFrames[(int) (animationTime * 10) % leftFrames.length];
             } else {
                 currentFrame = straightFrames[0];
@@ -273,14 +352,6 @@ public class GameScreen implements Screen {
             }
 
         } else {
-            float mouseX = Gdx.input.getX();
-            float mouseY = Gdx.graphics.getHeight() - Gdx.input.getY();
-            isRestartHovered = buttonRestartBounds.contains(mouseX, mouseY);
-
-            if (isRestartHovered && Gdx.input.isTouched()) {
-                game.setScreen(new GameScreen(game));
-            }
-
             blinkTime += delta;
             if (blinkTime >= 0.5f) {
                 areHeadLightsBlinking = !areHeadLightsBlinking;
@@ -313,7 +384,7 @@ public class GameScreen implements Screen {
             messageHeight = 0;
         }
 
-        if (Gdx.input.isKeyPressed(Input.Keys.LEFT) || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
+        if ( (((GameInputProcessor) Gdx.input.getInputProcessor()).isRightPressed) || (((GameInputProcessor) Gdx.input.getInputProcessor()).isLeftPressed) ) {
             batch.draw(assetManager.get("BrakeLightsOn.png", Texture.class), car.x, car.y, car.width, car.height);
         }
 
@@ -339,16 +410,18 @@ public class GameScreen implements Screen {
                 batch.draw(assetManager.get("HeadLightsOn.png", Texture.class), car.x, car.y, car.width, car.height);
             }
 
-            Texture restartTexture = isRestartHovered ?
-                    (Gdx.input.isTouched() ? assetManager.get("button_restart_clicked.png", Texture.class)
-                            : assetManager.get("button_restart_hover.png", Texture.class))
-                    : assetManager.get("button_restart.png", Texture.class);
+            Texture restartTexture = inputProcessor.isRestartClicked
+                    ? assetManager.get("button_restart_clicked.png", Texture.class)
+                    : (inputProcessor.isRestartHovered
+                    ? assetManager.get("button_restart_hover.png", Texture.class)
+                    : assetManager.get("button_restart.png", Texture.class));
             batch.draw(restartTexture, buttonRestartBounds.x, buttonRestartBounds.y, buttonRestartBounds.width, buttonRestartBounds.height);
         } else {
             font.draw(batch, "Car Racing!", 10, Gdx.graphics.getHeight() - 10);
             font.draw(batch, "Score: " + score, 10, Gdx.graphics.getHeight() - 30);
             font.draw(batch, "Fuel: " + fuelCollected, 10, Gdx.graphics.getHeight() - 50);
         }
+
         batch.end();
     }
 
