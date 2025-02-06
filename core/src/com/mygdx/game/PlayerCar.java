@@ -1,7 +1,6 @@
 package com.mygdx.game;
 
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Rectangle;
@@ -34,11 +33,11 @@ public class PlayerCar {
         currentFrame = straightFrames[0];
     }
 
-    public void update(float delta, float speed, float animationTime) {
-        if (Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
+    public void update(boolean leftPressed, boolean rightPressed, float delta, float animationTime) {
+        if (rightPressed) {
             bounds.x += carSpeed * delta;
             currentFrame = rightFrames[(int)(animationTime * 10) % rightFrames.length];
-        } else if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
+        } else if (leftPressed) {
             bounds.x -= carSpeed * delta;
             currentFrame = leftFrames[(int)(animationTime * 10) % leftFrames.length];
         } else {
@@ -82,6 +81,5 @@ public class PlayerCar {
     }
 
     public void dispose() {
-        // Caso seja necessário liberar recursos do carro
     }
 }

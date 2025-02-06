@@ -7,58 +7,35 @@ import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.*;
 import com.badlogic.gdx.graphics.g2d.*;
 import com.badlogic.gdx.math.Rectangle;
-import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ScreenUtils;
-
 import java.util.Iterator;
 
 public class GameScreen implements Screen {
     private final Main game;
     private SpriteBatch batch;
     private AssetManager assetManager;
-
-    // Player
     private PlayerCar playerCar;
-
-    // Pools e arrays
     private ObstaclePool obstaclePool;
     private FuelPool fuelPool;
     private Array<Obstacle> obstacles;
     private Array<Fuel> fuels;
-
-    // Fundo (estrada)
     private float roadY1, roadY2;
-
-    // Interface e placar
     private BitmapFont font;
     private boolean isGameOver = false;
     private int score = 0;
     private int fuelCollected = 0;
     private float timeSinceLastUpdate = 0f;
-
-    // Spawn de objetos
     private float obstacleSpawnTime = 0f;
     private float fuelSpawnTime = 0f;
     private float obstacleSpeed = 200f;
-
-    // Música e sons
-    private Music backgroundMusic;
-
-    // Tempo de animação (usado também no carro)
     private float animationTime = 0f;
-
-    // Botão de reiniciar
     private Rectangle buttonRestartBounds;
-    private boolean isRestartHovered = false;
-
-    // Efeito de partículas (quando game over)
+    private GameInputProcessor inputProcessor;
     private ParticleEffect fireEffect;
     private boolean isParticleActive = false;
     private boolean areHeadLightsBlinking = false;
     private float blinkTime = 0f;
-
-    // Balão de mensagem (exemplo)
     private boolean showMessage = false;
     private float messageTimer = 0f;
     private NinePatch patch;
@@ -67,8 +44,6 @@ public class GameScreen implements Screen {
     private final float maxMessageWidth = 150f;
     private final float maxMessageHeight = 150f;
     private final float messageGrowSpeed = 300f;
-
-    // Limites das pistas
     private float pistaEsquerda;
     private float pistaDireita;
 
@@ -80,12 +55,12 @@ public class GameScreen implements Screen {
     public void show() {
         batch = new SpriteBatch();
         assetManager = new AssetManager();
+
         obstaclePool = new ObstaclePool();
         fuelPool = new FuelPool();
         obstacles = new Array<>();
         fuels = new Array<>();
 
-        // Carregamento dos assets
         assetManager.load("SportsCar.png", Texture.class);
         assetManager.load("road.jpg", Texture.class);
         assetManager.load("car.png", Texture.class);
@@ -100,7 +75,6 @@ public class GameScreen implements Screen {
         assetManager.load("fuel_sound.mp3", Sound.class);
         assetManager.finishLoading();
 
-        // Configuração do carro do jogador com as animações
         Texture carSpriteSheet = assetManager.get("SportsCar.png", Texture.class);
         TextureRegion[][] tmpFrames = TextureRegion.split(carSpriteSheet, carSpriteSheet.getWidth() / 7, carSpriteSheet.getHeight());
         TextureRegion[] straightFrames = new TextureRegion[] { tmpFrames[0][0] };
@@ -108,28 +82,23 @@ public class GameScreen implements Screen {
         TextureRegion[] rightFrames = new TextureRegion[] { tmpFrames[0][4], tmpFrames[0][5], tmpFrames[0][6] };
         playerCar = new PlayerCar(straightFrames, leftFrames, rightFrames);
 
-        // Definindo limites laterais (pistas)
         pistaEsquerda = 130;
         pistaDireita = Gdx.graphics.getWidth() - 130;
 
-        // Configurando o fundo (estrada)
         roadY1 = 0;
         roadY2 = Gdx.graphics.getHeight();
 
         font = new BitmapFont();
 
-        // Configurando e iniciando a música de fundo
-        backgroundMusic = assetManager.get("background_music.mp3", Music.class);
+        Music backgroundMusic = assetManager.get("background_music.mp3", Music.class);
         backgroundMusic.setLooping(true);
         backgroundMusic.setVolume(0.5f);
         backgroundMusic.play();
 
-        // Configurando o efeito de partículas (para game over)
         fireEffect = new ParticleEffect();
         fireEffect.load(Gdx.files.internal("fire.p"), Gdx.files.internal(""));
         fireEffect.scaleEffect(0.5f);
 
-        // Botão de reiniciar
         buttonRestartBounds = new Rectangle(
                 Gdx.graphics.getWidth() / 2f - 100,
                 Gdx.graphics.getHeight() / 2f - 75,
@@ -137,8 +106,10 @@ public class GameScreen implements Screen {
                 50
         );
 
-        // Configurando o NinePatch para o balão de mensagem
         patch = new NinePatch(new Texture(Gdx.files.internal("knob.png")), 12, 12, 12, 12);
+
+        inputProcessor = new GameInputProcessor(buttonRestartBounds);
+        Gdx.input.setInputProcessor(inputProcessor);
     }
 
     @Override
@@ -164,7 +135,6 @@ public class GameScreen implements Screen {
                 obstacleSpeed += 5;
             }
 
-            // Movimento da estrada
             roadY1 -= obstacleSpeed * delta;
             roadY2 -= obstacleSpeed * delta;
             if (roadY1 + Gdx.graphics.getHeight() < 0) {
@@ -174,10 +144,8 @@ public class GameScreen implements Screen {
                 roadY2 = roadY1 + Gdx.graphics.getHeight();
             }
 
-            // Atualiza o carro do jogador
-            playerCar.update(delta, obstacleSpeed, animationTime);
+            playerCar.update(inputProcessor.isLeftPressed(), inputProcessor.isRightPressed(), delta, animationTime);
 
-            // Verifica se o carro ultrapassou os limites das pistas
             if (playerCar.getX() < pistaEsquerda) {
                 playerCar.setX(pistaEsquerda);
                 triggerGameOver();
@@ -187,7 +155,6 @@ public class GameScreen implements Screen {
                 triggerGameOver();
             }
 
-            // Cria obstáculos e combustível
             if (obstacleSpawnTime >= 2f) {
                 spawnObstacle();
                 obstacleSpawnTime = 0f;
@@ -197,12 +164,12 @@ public class GameScreen implements Screen {
                 fuelSpawnTime = 0f;
             }
 
-            // Atualiza e remove obstáculos
-            for (Iterator<Obstacle> iter = obstacles.iterator(); iter.hasNext();) {
-                Obstacle obstacle = iter.next();
+            Iterator<Obstacle> obstacleIter = obstacles.iterator();
+            while (obstacleIter.hasNext()) {
+                Obstacle obstacle = obstacleIter.next();
                 obstacle.update(delta);
                 if (obstacle.isOffScreen()) {
-                    iter.remove();
+                    obstacleIter.remove();
                     obstaclePool.free(obstacle);
                 }
                 if (obstacle.getCollisionBox().overlaps(playerCar.getCollisionBox())) {
@@ -210,34 +177,31 @@ public class GameScreen implements Screen {
                 }
             }
 
-            // Atualiza e remove combustível
-            for (Iterator<Fuel> iter = fuels.iterator(); iter.hasNext();) {
-                Fuel fuel = iter.next();
+            Iterator<Fuel> fuelIter = fuels.iterator();
+            while (fuelIter.hasNext()) {
+                Fuel fuel = fuelIter.next();
                 fuel.update(delta, obstacleSpeed);
                 if (fuel.isOffScreen()) {
-                    iter.remove();
+                    fuelIter.remove();
                     fuelPool.free(fuel);
                 } else if (fuel.getVisualBox().overlaps(playerCar.getCollisionBox())) {
                     fuelCollected++;
                     assetManager.get("fuel_sound.mp3", Sound.class).play();
-                    iter.remove();
+                    fuelIter.remove();
                     fuelPool.free(fuel);
                 } else {
-                    // Se o combustível colide com um obstáculo, remove-o
                     for (Obstacle obstacle : obstacles) {
                         if (obstacle.getCollisionBox().overlaps(fuel.getVisualBox())) {
-                            iter.remove();
+                            fuelIter.remove();
                             fuelPool.free(fuel);
                             break;
                         }
                     }
                 }
             }
-        } else {  // Game Over
-            float mouseX = Gdx.input.getX();
-            float mouseY = Gdx.graphics.getHeight() - Gdx.input.getY();
-            isRestartHovered = buttonRestartBounds.contains(mouseX, mouseY);
-            if (isRestartHovered && Gdx.input.isTouched()) {
+
+        } else {
+            if (inputProcessor.isRestartClicked()) {
                 game.setScreen(new GameScreen(game));
             }
             blinkTime += delta;
@@ -247,10 +211,10 @@ public class GameScreen implements Screen {
             }
         }
 
-        // Desenha todos os elementos
         batch.begin();
         batch.draw(assetManager.get("road.jpg", Texture.class), 0, roadY1, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         batch.draw(assetManager.get("road.jpg", Texture.class), 0, roadY2, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+
         playerCar.draw(batch);
 
         if (showMessage) {
@@ -271,8 +235,9 @@ public class GameScreen implements Screen {
             messageHeight = 0;
         }
 
-        if (Gdx.input.isKeyPressed(Input.Keys.LEFT) || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
-            batch.draw(assetManager.get("BrakeLightsOn.png", Texture.class), playerCar.getX(), playerCar.getY(), playerCar.getWidth(), playerCar.getHeight());
+        if (inputProcessor.isRightPressed() || inputProcessor.isLeftPressed()) {
+            batch.draw(assetManager.get("BrakeLightsOn.png", Texture.class),
+                    playerCar.getX(), playerCar.getY(), playerCar.getWidth(), playerCar.getHeight());
         }
 
         for (Obstacle obstacle : obstacles) {
@@ -302,15 +267,13 @@ public class GameScreen implements Screen {
             font.draw(batch, "Fuel collected: " + fuelCollected, Gdx.graphics.getWidth() / 2f - 60, Gdx.graphics.getHeight() / 2f - 120);
             if (areHeadLightsBlinking) {
                 batch.draw(assetManager.get("HeadLightsOn.png", Texture.class),
-                        playerCar.getX(),
-                        playerCar.getY(),
-                        playerCar.getWidth(),
-                        playerCar.getHeight());
+                        playerCar.getX(), playerCar.getY(), playerCar.getWidth(), playerCar.getHeight());
             }
-            Texture restartTexture = isRestartHovered ?
-                    (Gdx.input.isTouched() ? assetManager.get("button_restart_clicked.png", Texture.class)
-                            : assetManager.get("button_restart_hover.png", Texture.class))
-                    : assetManager.get("button_restart.png", Texture.class);
+            Texture restartTexture = inputProcessor.isRestartClicked()
+                    ? assetManager.get("button_restart_clicked.png", Texture.class)
+                    : (inputProcessor.isRestartHovered()
+                    ? assetManager.get("button_restart_hover.png", Texture.class)
+                    : assetManager.get("button_restart.png", Texture.class));
             batch.draw(restartTexture, buttonRestartBounds.x, buttonRestartBounds.y,
                     buttonRestartBounds.width, buttonRestartBounds.height);
         } else {
@@ -336,6 +299,7 @@ public class GameScreen implements Screen {
     private void triggerGameOver() {
         isGameOver = true;
         assetManager.get("collision_sound.mp3", Sound.class).play();
+        Music backgroundMusic = assetManager.get("background_music.mp3", Music.class);
         backgroundMusic.stop();
         isParticleActive = true;
         fireEffect.setPosition(playerCar.getX() + playerCar.getWidth() / 2,
