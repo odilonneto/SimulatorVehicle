@@ -49,13 +49,18 @@ public class GameScreen implements Screen {
     private float pistaDireita;
     private String carTextureFile;
 
+    // NOVOS CAMPOS: username recebido da tela de início e flag para evitar múltiplas atualizações do ranking
+    private String username;
+    private boolean rankingUpdated = false;
+
     public GameScreen(Main game) {
-        this(game, "SportsCar.png");
+        this(game, "SportsCar.png", "Player");
     }
 
-    public GameScreen(Main game, String carTextureFile) {
+    public GameScreen(Main game, String carTextureFile, String username) {
         this.game = game;
         this.carTextureFile = carTextureFile;
+        this.username = username;
     }
 
     @Override
@@ -181,7 +186,6 @@ public class GameScreen implements Screen {
                 fuelSpawnTime = 0f;
             }
 
-            Iterator<Obstacle> obstacleIter = obstacles.iterator();
             for (int i = 0; i < obstacles.size; i++) {
                 Obstacle obstacle = obstacles.get(i);
                 obstacle.update(delta, obstacles);
@@ -197,8 +201,7 @@ public class GameScreen implements Screen {
                 }
             }
 
-            Iterator<Fuel> fuelIter = fuels.iterator();
-            while (fuelIter.hasNext()) {
+            for (Iterator<Fuel> fuelIter = fuels.iterator(); fuelIter.hasNext();) {
                 Fuel fuel = fuelIter.next();
                 fuel.update(delta, obstacleSpeed);
                 if (fuel.isOffScreen()) {
@@ -222,7 +225,7 @@ public class GameScreen implements Screen {
 
         } else {
             if (inputProcessor.isRestartClicked()) {
-                game.setScreen(new GameScreen(game, this.carTextureFile));
+                game.setScreen(new GameScreen(game, this.carTextureFile, username));
             }
 
             if (inputProcessor.isMenuClicked()) {
@@ -328,15 +331,22 @@ public class GameScreen implements Screen {
         fuels.add(fuel);
     }
 
+    // Ao disparar o Game Over, atualiza o ranking (apenas uma vez)
     private void triggerGameOver() {
-        isGameOver = true;
-        assetManager.get("collision_sound.mp3", Sound.class).play();
-        Music backgroundMusic = assetManager.get("background_music.mp3", Music.class);
-        backgroundMusic.stop();
-        isParticleActive = true;
-        fireEffect.setPosition(playerCar.getX() + playerCar.getWidth() / 2,
-                playerCar.getY() + playerCar.getHeight() / 2);
-        fireEffect.start();
+        if (!isGameOver) {
+            isGameOver = true;
+            assetManager.get("collision_sound.mp3", Sound.class).play();
+            Music backgroundMusic = assetManager.get("background_music.mp3", Music.class);
+            backgroundMusic.stop();
+            isParticleActive = true;
+            fireEffect.setPosition(playerCar.getX() + playerCar.getWidth() / 2,
+                    playerCar.getY() + playerCar.getHeight() / 2);
+            fireEffect.start();
+            if (!rankingUpdated) {
+                RankingManager.updateRanking(username, score, fuelCollected);
+                rankingUpdated = true;
+            }
+        }
     }
 
     @Override
