@@ -49,7 +49,6 @@ public class StartScreen implements Screen {
     private AssetManager assetManager;
     private Rectangle buttonStartBounds;
 
-    // NOVOS CAMPOS: Stage e TextField para entrada do nome
     private Stage stage;
     private TextField usernameField;
 
@@ -122,16 +121,14 @@ public class StartScreen implements Screen {
                 purpleCarBounds
         );
 
-        // INICIALIZA O STAGE E A TEXTFIELD (necessário o arquivo "uiskin.json" na pasta assets)
         stage = new Stage();
         Skin skin = new Skin(Gdx.files.internal("uiskin.json"));
         usernameField = new TextField("", skin);
         usernameField.setMessageText("Enter your name");
-        usernameField.setPosition(50, Gdx.graphics.getHeight() - 100);
-        usernameField.setSize(300, 50);
+        usernameField.setPosition(70, Gdx.graphics.getHeight() - 430);
+        usernameField.setSize(350, 50);
         stage.addActor(usernameField);
 
-        // Adiciona o stage e os outros input processors (o stage vem primeiro para capturar a digitação)
         InputMultiplexer multiplexer = new InputMultiplexer();
         multiplexer.addProcessor(stage);
         multiplexer.addProcessor(inputProcessor);
@@ -168,24 +165,23 @@ public class StartScreen implements Screen {
         font.draw(batch, "Car Racing", 160, Gdx.graphics.getHeight() - 50);
 
         font.getData().setScale(1.5f);
-        font.setColor(Color.LIGHT_GRAY);
+        font.setColor(Color.YELLOW);
         font.draw(batch, "Choose your vehicle:", 140, Gdx.graphics.getHeight() - 100);
 
-        // Rótulo para a entrada do nome
         font.getData().setScale(1.0f);
-        font.draw(batch, "Your Name:", 50, Gdx.graphics.getHeight() - 20);
+        font.setColor(Color.YELLOW);
+        font.draw(batch, "Player:", 70, Gdx.graphics.getHeight() - 350);
 
         font.getData().setScale(1.0f);
-        font.setColor(Color.LIGHT_GRAY);
-        font.draw(batch, "Ranking", 210, Gdx.graphics.getHeight() - 400);
+        font.setColor(Color.YELLOW);
+        font.draw(batch, "Ranking", 210, Gdx.graphics.getHeight() - 450);
 
-        // Exibe as entradas do ranking
         Array<RankingManager.RankingEntry> ranking = RankingManager.loadRanking();
-        float rankStartY = Gdx.graphics.getHeight() - 430;
+        float rankStartY = Gdx.graphics.getHeight() - 480;
         for (int i = 0; i < ranking.size; i++) {
             RankingManager.RankingEntry entry = ranking.get(i);
-            font.draw(batch, (i + 1) + ". " + entry.username + " - Score: " + entry.score + " - Fuel: " + entry.fuel,
-                    210, rankStartY - i * 30);
+            font.draw(batch, (i + 1) + ". " + entry.username + " - Fuel: " + entry.fuel  + " - Score: " + entry.score,
+                    140, rankStartY - i * 30);
         }
 
         batch.draw(currentFrameDefault, defaultCarBounds.x, defaultCarBounds.y, defaultCarBounds.width, defaultCarBounds.height);
@@ -223,7 +219,6 @@ public class StartScreen implements Screen {
                 buttonStartBounds.width, buttonStartBounds.height);
         batch.end();
 
-        // Ao clicar em start (e se uma escolha de carro foi feita), recupera o nome digitado
         if (inputProcessor.isStartClicked() && inputProcessor.getSelectedCar() != null) {
             String username = usernameField.getText();
             if (username == null || username.trim().isEmpty()) {
@@ -232,7 +227,6 @@ public class StartScreen implements Screen {
             game.setScreen(new GameScreen(game, inputProcessor.getSelectedCar(), username));
         }
 
-        // Atualiza e desenha o stage (a TextField ficará por cima dos demais elementos)
         stage.act(delta);
         stage.draw();
     }

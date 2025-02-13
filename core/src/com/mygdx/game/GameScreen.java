@@ -40,8 +40,13 @@ public class GameScreen implements Screen {
     private boolean showMessage = false;
     private float messageTimer = 0f;
     private NinePatch patch;
+    private NinePatch patch2;
     private float messageWidth = 0f;
     private float messageHeight = 0f;
+    private float messageWidthBalloon = 0f;
+    private float messageHeightBalloon = 0f;
+    private final float maxMessageWidthBalloon = 210f;
+    private final float maxMessageHeightBalloon = 105f;
     private final float maxMessageWidth = 150f;
     private final float maxMessageHeight = 150f;
     private final float messageGrowSpeed = 300f;
@@ -49,7 +54,6 @@ public class GameScreen implements Screen {
     private float pistaDireita;
     private String carTextureFile;
 
-    // NOVOS CAMPOS: username recebido da tela de início e flag para evitar múltiplas atualizações do ranking
     private String username;
     private boolean rankingUpdated = false;
 
@@ -123,12 +127,13 @@ public class GameScreen implements Screen {
 
         buttonMenuBounds = new Rectangle(
                 Gdx.graphics.getWidth() / 2f - 80,
-                Gdx.graphics.getHeight() / 2f,
+                Gdx.graphics.getHeight() / 2f + 30,
                 150,
                 150
         );
 
-        patch = new NinePatch(new Texture(Gdx.files.internal("knob.png")), 12, 12, 12, 12);
+        patch = new NinePatch(new Texture(Gdx.files.internal("piloto.png")), 12, 12, 12, 12);
+        patch2 = new NinePatch(new Texture(Gdx.files.internal("balao.png")), 12, 12, 12, 12);
 
         inputProcessor = new GameInputProcessor(null, buttonRestartBounds, buttonMenuBounds);
         Gdx.input.setInputProcessor(inputProcessor);
@@ -151,6 +156,10 @@ public class GameScreen implements Screen {
             if (showMessage && messageTimer >= 10f) {
                 showMessage = false;
             }
+            if (messageTimer >= 45) {
+                messageTimer = 0f;
+            }
+
             if (timeSinceLastUpdate >= 1f) {
                 score += 10;
                 timeSinceLastUpdate = 0f;
@@ -207,14 +216,14 @@ public class GameScreen implements Screen {
                 if (fuel.isOffScreen()) {
                     fuelIter.remove();
                     fuelPool.free(fuel);
-                } else if (fuel.getVisualBox().overlaps(playerCar.getCollisionBox())) {
+                } else if (fuel.getCollisionBox().overlaps(playerCar.getCollisionBox())) {
                     fuelCollected++;
                     assetManager.get("fuel_sound.mp3", Sound.class).play();
                     fuelIter.remove();
                     fuelPool.free(fuel);
                 } else {
                     for (Obstacle obstacle : obstacles) {
-                        if (obstacle.getCollisionBox().overlaps(fuel.getVisualBox())) {
+                        if (obstacle.getCollisionBox().overlaps(fuel.getCollisionBox())) {
                             fuelIter.remove();
                             fuelPool.free(fuel);
                             break;
@@ -253,13 +262,34 @@ public class GameScreen implements Screen {
             }
             messageWidth = Math.min(messageWidth, maxMessageWidth);
             messageHeight = Math.min(messageHeight, maxMessageHeight);
-            float messageX = 0;
-            float messageY = 0;
-            patch.draw(batch, messageX, messageY, messageWidth, messageHeight);
-            font.draw(batch, "Hello!", messageX + 95, messageY + messageHeight - 30);
+
+            if (messageWidthBalloon < maxMessageWidthBalloon) {
+                messageWidthBalloon += messageGrowSpeed * delta;
+            }
+            if (messageHeightBalloon < maxMessageHeightBalloon) {
+                messageHeightBalloon += messageGrowSpeed * delta;
+            }
+
+            messageWidthBalloon = Math.min(messageWidthBalloon, maxMessageWidthBalloon);
+            messageHeightBalloon = Math.min(messageHeightBalloon, maxMessageHeightBalloon);
+
+            patch.draw(batch, 0, 0, messageWidth, messageHeight);
+            patch2.draw(batch, 0, 150, messageWidthBalloon, messageHeightBalloon);
+            String line1 = "Collect as much fuel as";
+            String line2 = "possible!";
+            float x = 25;
+            float y = 230;
+            if (messageWidthBalloon == maxMessageWidthBalloon && messageHeightBalloon == maxMessageHeightBalloon) {
+                font.setColor(Color.BLACK);
+                font.draw(batch, line1, x, y);
+                font.draw(batch, line2, x, y - font.getLineHeight());
+                font.setColor(Color.WHITE);
+            }
         } else {
             messageWidth = 0;
             messageHeight = 0;
+            messageWidthBalloon = 0;
+            messageHeightBalloon = 0;
         }
 
         if (inputProcessor.isRightPressed() || inputProcessor.isLeftPressed()) {
@@ -331,7 +361,6 @@ public class GameScreen implements Screen {
         fuels.add(fuel);
     }
 
-    // Ao disparar o Game Over, atualiza o ranking (apenas uma vez)
     private void triggerGameOver() {
         if (!isGameOver) {
             isGameOver = true;

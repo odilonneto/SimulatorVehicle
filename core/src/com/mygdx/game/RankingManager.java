@@ -8,15 +8,13 @@ import com.badlogic.gdx.utils.Json;
 public class RankingManager {
     private static final String PREFS_NAME = "mygame_ranking";
     private static final String KEY_RANKING = "ranking";
-    private static final int MAX_ENTRIES = 5; // máximo de entradas no ranking
+    private static final int MAX_ENTRIES = 5;
 
-    // Classe que representa cada entrada do ranking
     public static class RankingEntry implements Comparable<RankingEntry> {
         public String username;
         public int score;
         public int fuel;
 
-        // Construtor vazio para a serialização
         public RankingEntry() { }
 
         public RankingEntry(String username, int score, int fuel) {
@@ -27,8 +25,11 @@ public class RankingManager {
 
         @Override
         public int compareTo(RankingEntry other) {
-            // Ordena em ordem decrescente (maior score primeiro)
-            return Integer.compare(other.score, this.score);
+            if (this.fuel != other.fuel) {
+                return Integer.compare(other.fuel, this.fuel);
+            } else {
+                return Integer.compare(other.score, this.score);
+            }
         }
     }
 
@@ -55,7 +56,22 @@ public class RankingManager {
 
     public static void updateRanking(String username, int score, int fuel) {
         Array<RankingEntry> ranking = loadRanking();
-        ranking.add(new RankingEntry(username, score, fuel));
+        boolean found = false;
+        for (int i = 0; i < ranking.size; i++) {
+            RankingEntry entry = ranking.get(i);
+            if (entry.username.equals(username)) {
+                if (fuel > entry.fuel || (fuel == entry.fuel && score > entry.score)) {
+                    entry.fuel = fuel;
+                    entry.score = score;
+                }
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            ranking.add(new RankingEntry(username, score, fuel));
+        }
+
         ranking.sort();
         while (ranking.size > MAX_ENTRIES) {
             ranking.removeIndex(ranking.size - 1);
